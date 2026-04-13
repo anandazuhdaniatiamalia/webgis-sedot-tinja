@@ -3,110 +3,220 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGIS Sedot Tinja - Kabupaten Ngawi</title>
+    <title>Dashboard WebGIS Layanan Sedot Tinja</title>
     
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        #map { height: 100vh; width: 100%; }
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+        }
+
+        body { overflow: hidden; font-family: 'Inter', sans-serif; }
+        #map { height: calc(100vh - 60px); width: 100%; z-index: 1; }
         
-        /* Styling Panel Info */
-        .info-panel {
+        .navbar { background-color: var(--primary-color) !important; z-index: 1001; }
+        
+        /* Floating Sidebar */
+        .sidebar {
             position: absolute;
-            top: 20px;
-            right: 20px;
+            top: 80px;
+            left: 20px;
             z-index: 1000;
-            background: white;
+            width: 320px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(5px);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .stats-card {
+            background: var(--accent-color);
+            color: white;
             padding: 15px;
             border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            max-width: 300px;
+            margin-bottom: 20px;
         }
+
+        .leaflet-popup-content-wrapper { border-radius: 10px; padding: 5px; }
+        .custom-popup .leaflet-popup-content { margin: 10px; line-height: 1.6; }
         
-        h2 { margin-top: 0; color: #2c3e50; font-size: 18px; }
-        .stats { font-size: 14px; color: #7f8c8d; }
-        .legend { line-height: 18px; color: #555; margin-top: 10px; }
-        .legend i { width: 18px; height: 18px; float: left; margin-right: 8px; opacity: 0.7; border-radius: 50%; }
+        .filter-group label { font-weight: 600; font-size: 13px; color: #666; }
+
+        /* Loading Spinner */
+        #loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: white; z-index: 2000; display: flex;
+            justify-content: center; align-items: center;
+        }
     </style>
 </head>
 <body>
 
-    <div class="info-panel">
-        <h2>Monitoring Sedot Tinja</h2>
-        <p class="stats">Kabupaten Ngawi - 2025</p>
+    <div id="loader"><div class="spinner-border text-primary"></div></div>
+
+    <nav class="navbar navbar-dark shadow-sm">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="fas fa-map-location-dot me-2"></i> WebGIS Monitoring Sedot Tinja
+            </span>
+        </div>
+    </nav>
+
+    <div class="sidebar">
+        <div class="stats-card text-center">
+            <h6 class="mb-1">Total Layanan Selesai</h6>
+            <h2 id="total-count" class="mb-0">0</h2>
+        </div>
+
+        <div class="filter-group mb-3">
+            <label class="mb-1"><i class="fas fa-filter me-1"></i> Pilih Kecamatan</label>
+            <select id="filter-kecamatan" class="form-select form-select-sm">
+                <option value="all">Semua Kecamatan</option>
+            </select>
+        </div>
+
+        <div class="filter-group mb-4">
+            <label class="mb-1"><i class="fas fa-search me-1"></i> Cari Nama Warga</label>
+            <input type="text" id="search-nama" class="form-control form-control-sm" placeholder="Ketik nama...">
+        </div>
+
+        <div class="legend">
+            <p class="small text-muted mb-2 font-weight-bold">Keterangan:</p>
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-circle text-primary me-2"></i> 
+                <span class="small">Layanan Terverifikasi</span>
+            </div>
+        </div>
         <hr>
-        <div id="summary">Memuat data...</div>
+        <p class="x-small text-muted" style="font-size: 11px;">
+            Dinas Perumahan Rakyat dan Kawasan Permukiman - Kab. Ngawi
+        </p>
     </div>
 
     <div id="map"></div>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
     <script>
-        // 1. Inisialisasi Peta (Koordinat Tengah Ngawi)
-        const map = L.map('map').setView([-7.40, 111.44], 11);
+        // 1. Inisialisasi Peta & Basemaps
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        });
 
-        // 2. Tambahkan Basemap
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community'
+        });
 
-        // 3. Fungsi untuk memproses data CSV
-        // Ganti 'Titik_Koordinat_2025_5.csv' dengan path file kamu di GitHub
+        const map = L.map('map', {
+            center: [-7.40, 111.44],
+            zoom: 11,
+            layers: [osm]
+        });
+
+        const baseMaps = {
+            "Peta Jalan": osm,
+            "Satelit": satellite
+        };
+        L.control.layers(baseMaps).addTo(map);
+
+        // 2. Variabel Global
+        let allData = [];
+        let markerLayer = L.layerGroup().addTo(map);
+
+        // 3. Load Data CSV
         const csvUrl = 'Titik_Koordinat_2025_5.csv';
 
         Papa.parse(csvUrl, {
             download: true,
             header: true,
             dynamicTyping: true,
+            skipEmptyLines: true,
             complete: function(results) {
-                const data = results.data;
-                renderMarkers(data);
-                updateSummary(data);
+                allData = results.data;
+                populateFilter(allData);
+                renderData(allData);
+                document.getElementById('loader').style.display = 'none';
             }
         });
 
-        // 4. Render Titik ke Peta
-        function renderMarkers(data) {
-            const markers = L.layerGroup();
-            
+        // 4. Fungsi Mengisi Dropdown Filter
+        function populateFilter(data) {
+            const kecamatanList = [...new Set(data.map(item => item.Kecamatan).filter(Boolean))].sort();
+            const select = document.getElementById('filter-kecamatan');
+            kecamatanList.forEach(kec => {
+                const opt = document.createElement('option');
+                opt.value = kec;
+                opt.innerHTML = kec;
+                select.appendChild(opt);
+            });
+        }
+
+        // 5. Fungsi Render Titik ke Peta
+        function renderData(data) {
+            markerLayer.clearLayers();
+            let count = 0;
+
             data.forEach(row => {
                 if (row.Y && row.X) {
+                    count++;
                     const popupContent = `
-                        <div style="font-size:14px">
-                            <b>Nama:</b> ${row.Nama}<br>
-                            <b>Alamat:</b> ${row.Alamat}<br>
-                            <b>Desa:</b> ${row.Desa}<br>
-                            <b>Kecamatan:</b> ${row.Kecamatan}<br>
-                            <hr>
-                            <b>Tgl Penyedotan:</b> ${row.Tgl_Penyedotan}<br>
-                            <b>Volume:</b> ${row.Volume} m³<br>
-                            <b>Jadwal Berikutnya:</b> <span style="color:red">${row.Jadwal_Penyedotan}</span>
+                        <div class="custom-popup">
+                            <h6 class="border-bottom pb-2"><b>${row.Nama}</b></h6>
+                            <table class="table table-sm table-borderless mb-0" style="font-size:12px">
+                                <tr><td><i class="fas fa-home"></i></td><td>${row.Desa}, ${row.Kecamatan}</td></tr>
+                                <tr><td><i class="fas fa-truck-droplet"></i></td><td>${row.Volume} m³ (${row.Material_Tangki})</td></tr>
+                                <tr><td><i class="fas fa-calendar-check"></i></td><td>${row.Tgl_Penyedotan}</td></tr>
+                                <tr class="text-danger"><td><i class="fas fa-clock"></i></td><td><b>Next: ${row.Jadwal_Penyedotan}</b></td></tr>
+                            </table>
+                            <a href="https://www.google.com/maps?q=${row.Y},${row.X}" target="_blank" class="btn btn-primary btn-sm w-100 mt-2 text-white">
+                                <i class="fas fa-directions"></i> Petunjuk Arah
+                            </a>
                         </div>
                     `;
 
                     L.circleMarker([row.Y, row.X], {
-                        radius: 8,
+                        radius: 7,
                         fillColor: "#3498db",
                         color: "#fff",
-                        weight: 1,
+                        weight: 2,
                         opacity: 1,
                         fillOpacity: 0.8
                     })
                     .bindPopup(popupContent)
-                    .addTo(map);
+                    .addTo(markerLayer);
                 }
             });
+            document.getElementById('total-count').innerText = count;
         }
 
-        function updateSummary(data) {
-            const total = data.filter(d => d.Nama).length;
-            document.getElementById('summary').innerHTML = `
-                <b>Total Layanan:</b> ${total} Rumah Tangga<br>
-                <b>Status:</b> Terverifikasi
-            `;
+        // 6. Event Listeners untuk Filter & Search
+        document.getElementById('filter-kecamatan').addEventListener('change', filterData);
+        document.getElementById('search-nama').addEventListener('input', filterData);
+
+        function filterData() {
+            const selectedKec = document.getElementById('filter-kecamatan').value;
+            const searchVal = document.getElementById('search-nama').value.toLowerCase();
+
+            const filtered = allData.filter(item => {
+                const matchKec = selectedKec === 'all' || item.Kecamatan === selectedKec;
+                const matchNama = item.Nama && item.Nama.toLowerCase().includes(searchVal);
+                return matchKec && matchNama;
+            });
+
+            renderData(filtered);
+            if (filtered.length > 0 && selectedKec !== 'all') {
+                const group = new L.featureGroup(markerLayer.getLayers());
+                map.fitBounds(group.getBounds());
+            }
         }
     </script>
 </body>
