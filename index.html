@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGIS Sedot Tinja - Kabupaten Ngawi</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        
+        /* Styling Panel Info */
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            max-width: 300px;
+        }
+        
+        h2 { margin-top: 0; color: #2c3e50; font-size: 18px; }
+        .stats { font-size: 14px; color: #7f8c8d; }
+        .legend { line-height: 18px; color: #555; margin-top: 10px; }
+        .legend i { width: 18px; height: 18px; float: left; margin-right: 8px; opacity: 0.7; border-radius: 50%; }
+    </style>
+</head>
+<body>
+
+    <div class="info-panel">
+        <h2>Monitoring Sedot Tinja</h2>
+        <p class="stats">Kabupaten Ngawi - 2025</p>
+        <hr>
+        <div id="summary">Memuat data...</div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+
+    <script>
+        // 1. Inisialisasi Peta (Koordinat Tengah Ngawi)
+        const map = L.map('map').setView([-7.40, 111.44], 11);
+
+        // 2. Tambahkan Basemap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // 3. Fungsi untuk memproses data CSV
+        // Ganti 'Titik_Koordinat_2025_5.csv' dengan path file kamu di GitHub
+        const csvUrl = 'Titik_Koordinat_2025_5.csv';
+
+        Papa.parse(csvUrl, {
+            download: true,
+            header: true,
+            dynamicTyping: true,
+            complete: function(results) {
+                const data = results.data;
+                renderMarkers(data);
+                updateSummary(data);
+            }
+        });
+
+        // 4. Render Titik ke Peta
+        function renderMarkers(data) {
+            const markers = L.layerGroup();
+            
+            data.forEach(row => {
+                if (row.Y && row.X) {
+                    const popupContent = `
+                        <div style="font-size:14px">
+                            <b>Nama:</b> ${row.Nama}<br>
+                            <b>Alamat:</b> ${row.Alamat}<br>
+                            <b>Desa:</b> ${row.Desa}<br>
+                            <b>Kecamatan:</b> ${row.Kecamatan}<br>
+                            <hr>
+                            <b>Tgl Penyedotan:</b> ${row.Tgl_Penyedotan}<br>
+                            <b>Volume:</b> ${row.Volume} m³<br>
+                            <b>Jadwal Berikutnya:</b> <span style="color:red">${row.Jadwal_Penyedotan}</span>
+                        </div>
+                    `;
+
+                    L.circleMarker([row.Y, row.X], {
+                        radius: 8,
+                        fillColor: "#3498db",
+                        color: "#fff",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    })
+                    .bindPopup(popupContent)
+                    .addTo(map);
+                }
+            });
+        }
+
+        function updateSummary(data) {
+            const total = data.filter(d => d.Nama).length;
+            document.getElementById('summary').innerHTML = `
+                <b>Total Layanan:</b> ${total} Rumah Tangga<br>
+                <b>Status:</b> Terverifikasi
+            `;
+        }
+    </script>
+</body>
+</html>
