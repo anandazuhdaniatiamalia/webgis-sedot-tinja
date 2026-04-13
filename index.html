@@ -9,38 +9,22 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; }
         #map { height: 100vh; width: 100%; background: #f8f9fa; }
-        
         .floating-panel {
-            position: absolute; top: 10px; left: 10px; z-index: 1000;
-            width: 300px; background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(8px); padding: 15px; border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-
-        #loader {
-            position: fixed; inset: 0; background: white; z-index: 9999;
-            display: flex; justify-content: center; align-items: center; font-weight: bold;
+            position: absolute; top: 15px; left: 15px; z-index: 1000;
+            width: 300px; background: rgba(255, 255, 255, 0.95);
+            padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
     </style>
 </head>
 <body>
 
-    <div id="loader">MENGUNDUH DATA...</div>
-
     <div class="floating-panel">
-        <h5 class="mb-1">WebGIS Sedot Tinja</h5>
-        <p class="text-muted small mb-3">Kabupaten Ngawi</p>
-        
-        <div class="alert alert-primary py-2 px-3 mb-3">
-            <small>Total Data:</small> <b id="counter">0</b>
-        </div>
-
-        <input type="text" id="search" class="form-control form-control-sm mb-2" placeholder="Cari Nama/Desa...">
-        <select id="filterKec" class="form-select form-select-sm">
-            <option value="">Semua Kecamatan</option>
-        </select>
+        <h6 class="fw-bold mb-1">WebGIS Monitoring</h6>
+        <div class="badge bg-primary mb-3">Total Data: <span id="counter">0</span></div>
+        <input type="text" id="search" class="form-control form-control-sm mb-2" placeholder="Cari nama...">
+        <select id="filterKec" class="form-select form-select-sm"><option value="">Semua Kecamatan</option></select>
     </div>
 
     <div id="map"></div>
@@ -49,42 +33,23 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
     <script>
-        // Gunakan Canvas untuk kecepatan maksimal
         const map = L.map('map', { preferCanvas: true }).setView([-7.40, 111.44], 11);
-        
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap'
-        }).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-        let csvData = [];
         const markerLayer = L.layerGroup().addTo(map);
+        let csvData = [];
 
-        // Perbaikan URL: Menggunakan path relatif yang lebih aman
-        const CSV_FILE = 'Titik_Koordinat_2025_5.csv';
-
-        async function loadData() {
-            try {
-                const response = await fetch(CSV_FILE);
-                if (!response.ok) throw new Error('File tidak ditemukan');
-                
-                const csvText = await response.text();
-                
-                Papa.parse(csvText, {
-                    header: true,
-                    dynamicTyping: true,
-                    skipEmptyLines: true,
-                    complete: function(results) {
-                        csvData = results.data.filter(d => d.Y && d.X);
-                        setupFilters();
-                        updateMap();
-                        document.getElementById('loader').style.display = 'none';
-                    }
-                });
-            } catch (err) {
-                document.getElementById('loader').innerHTML = "Error: File CSV tidak ditemukan di server.";
-                console.error(err);
+        // LOAD DATA DARI CSV
+        Papa.parse('Titik_Koordinat_2025_5.csv', {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                csvData = results.data;
+                setupFilters();
+                updateMap();
             }
-        }
+        });
 
         function updateMap() {
             markerLayer.clearLayers();
@@ -93,17 +58,23 @@
             
             let count = 0;
             csvData.forEach(d => {
-                const matchKec = !fKec || d.Kecamatan === fKec;
-                const matchSearch = !sText || (d.Nama?.toLowerCase().includes(sText)) || (d.Desa?.toLowerCase().includes(sText));
+                // PEMBERSIHAN DATA KOORDINAT (FIX UNTUK ERROR INVALID LATLNG)
+                let lat = d.Y ? String(d.Y).trim().replace(/[^0-9.-]/g, '') : null;
+                let lng = d.X ? String(d.X).trim().replace(/[^0-9.-]/g, '') : null;
 
-                if (matchKec && matchSearch) {
-                    count++;
-                    const m = L.circleMarker([d.Y, d.X], {
-                        radius: 5, fillColor: '#007bff', color: '#fff', weight: 1, fillOpacity: 0.8
-                    });
-                    
-                    m.bindPopup(`<b>${d.Nama}</b><br>${d.Desa}<br>Vol: ${d.Volume} m³`);
-                    markerLayer.addLayer(m);
+                if (lat && lng) {
+                    const matchKec = !fKec || d.Kecamatan === fKec;
+                    const matchSearch = !sText || d.Nama?.toLowerCase().includes(sText);
+
+                    if (matchKec && matchSearch) {
+                        count++;
+                        // Gambar marker hanya jika koordinat valid
+                        L.circleMarker([parseFloat(lat), parseFloat(lng)], {
+                            radius: 6, fillColor: '#007bff', color: '#fff', weight: 1, fillOpacity: 0.8
+                        })
+                        .bindPopup(`<b>${d.Nama}</b><br>${d.Desa}`)
+                        .addTo(markerLayer);
+                    }
                 }
             });
             document.getElementById('counter').innerText = count;
@@ -117,8 +88,6 @@
 
         document.getElementById('search').addEventListener('input', updateMap);
         document.getElementById('filterKec').addEventListener('change', updateMap);
-
-        loadData();
     </script>
 </body>
 </html>
