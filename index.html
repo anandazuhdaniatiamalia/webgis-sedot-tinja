@@ -1,93 +1,448 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGIS Sedot Tinja - Ngawi</title>
-    
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; }
-        #map { height: 100vh; width: 100%; background: #f8f9fa; }
-        .floating-panel {
-            position: absolute; top: 15px; left: 15px; z-index: 1000;
-            width: 300px; background: rgba(255, 255, 255, 0.95);
-            padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WebGIS Sedot Tinja — DPRKP Ngawi</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    :root {
+      --teal:#0f9689;--teal-light:#17b8a8;--teal-dark:#0a6b60;
+      --amber:#f59e0b;--red:#ef4444;--blue:#3b82f6;--purple:#8b5cf6;--green:#22c55e;
+      --bg:#f0f4f3;--card:#ffffff;--text:#1a2421;--muted:#6b7c78;--border:#dde8e6;
+      --shadow:0 2px 12px rgba(15,150,137,0.12);--radius:14px;--panel-w:340px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
+    #map{position:fixed;inset:0;z-index:1;}
+    #topbar{
+      position:fixed;top:0;left:0;right:0;z-index:900;height:56px;
+      background:var(--teal);display:flex;align-items:center;gap:10px;padding:0 14px;
+      box-shadow:0 2px 16px rgba(15,150,137,0.35);
+    }
+    #topbar .logo{display:flex;align-items:center;gap:8px;flex:1;min-width:0;}
+    #topbar .logo-icon{width:34px;height:34px;background:rgba(255,255,255,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+    #topbar .logo-text{min-width:0;}
+    #topbar .logo-text h1{font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;}
+    #topbar .logo-text p{font-size:10px;color:rgba(255,255,255,0.72);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    #togglePanel{background:rgba(255,255,255,0.18);border:none;border-radius:8px;color:#fff;cursor:pointer;padding:6px 10px;font-size:20px;line-height:1;flex-shrink:0;transition:background .2s;}
+    #togglePanel:hover{background:rgba(255,255,255,0.28);}
+    #panel{position:fixed;top:56px;left:0;bottom:0;width:var(--panel-w);z-index:800;background:var(--card);box-shadow:2px 0 24px rgba(0,0,0,0.1);display:flex;flex-direction:column;transition:transform .3s cubic-bezier(.4,0,.2,1);overflow:hidden;}
+    #panel.hidden{transform:translateX(-100%);}
+    #stats-bar{padding:14px 14px 10px;background:linear-gradient(135deg,var(--teal-dark) 0%,var(--teal) 100%);display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+    .stat-card{background:rgba(255,255,255,0.12);border-radius:10px;padding:10px 12px;color:#fff;}
+    .stat-card .val{font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:1;}
+    .stat-card .lbl{font-size:10px;opacity:.75;margin-top:2px;}
+    #filters{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
+    .input-wrap{position:relative;}
+    .input-wrap .icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.5;pointer-events:none;}
+    .input-wrap input,.input-wrap select{width:100%;padding:9px 10px 9px 32px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;color:var(--text);background:var(--bg);outline:none;transition:border-color .2s;appearance:none;-webkit-appearance:none;}
+    .input-wrap input:focus,.input-wrap select:focus{border-color:var(--teal);background:#fff;}
+    .filter-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .btn-reset{padding:9px;background:#fff;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:5px;}
+    .btn-reset:hover{border-color:var(--red);color:var(--red);}
+    #list-header{padding:10px 14px 6px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+    #list{flex:1;overflow-y:auto;padding:0 10px 100px;}
+    #list::-webkit-scrollbar{width:4px;}
+    #list::-webkit-scrollbar-track{background:transparent;}
+    #list::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+    .list-item{padding:10px;border-radius:10px;cursor:pointer;transition:background .15s;display:flex;align-items:flex-start;gap:10px;margin-bottom:2px;}
+    .list-item:hover{background:var(--bg);}
+    .list-item.active{background:#e6f7f6;}
+    .list-dot{width:10px;height:10px;border-radius:50%;margin-top:3px;flex-shrink:0;}
+    .list-info{flex:1;min-width:0;}
+    .list-nama{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .list-sub{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .list-date{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--teal);font-weight:600;flex-shrink:0;}
+    .custom-popup .leaflet-popup-content-wrapper{border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.18);padding:0;overflow:hidden;min-width:260px;max-width:300px;}
+    .custom-popup .leaflet-popup-content{margin:0 !important;width:100% !important;}
+    .custom-popup .leaflet-popup-tip-container{display:none;}
+    .popup-header{padding:12px 14px 10px;color:#fff;}
+    .popup-header .ph-no{font-size:10px;font-family:'JetBrains Mono',monospace;opacity:.7;margin-bottom:2px;}
+    .popup-header h3{font-size:14px;font-weight:700;line-height:1.3;}
+    .popup-header .ph-badge{display:inline-block;margin-top:6px;background:rgba(255,255,255,0.2);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:600;}
+    .popup-body{padding:12px 14px;display:flex;flex-direction:column;gap:8px;}
+    .popup-row{display:grid;grid-template-columns:38% 62%;font-size:12px;gap:4px;}
+    .popup-row .pk{color:var(--muted);font-weight:500;}
+    .popup-row .pv{color:var(--text);font-weight:600;}
+    .popup-divider{height:1px;background:var(--border);margin:4px 0;}
+    .popup-next{margin:0 14px 14px;background:linear-gradient(135deg,#e6f7f6,#d0f0ee);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;}
+    .popup-next .pn-icon{font-size:20px;}
+    .popup-next .pn-text{flex:1;}
+    .popup-next .pn-label{font-size:10px;color:var(--muted);font-weight:500;}
+    .popup-next .pn-date{font-size:15px;font-weight:700;color:var(--teal-dark);font-family:'JetBrains Mono',monospace;}
+    #bottom-sheet{display:none;position:fixed;bottom:0;left:0;right:0;z-index:900;background:var(--card);border-radius:18px 18px 0 0;box-shadow:0 -4px 32px rgba(0,0,0,0.15);max-height:80vh;flex-direction:column;}
+    #bottom-sheet.show{display:flex;}
+    .bs-handle{display:flex;justify-content:center;padding:10px 0 6px;cursor:pointer;}
+    .bs-handle-bar{width:40px;height:4px;background:var(--border);border-radius:99px;}
+    .bs-content{overflow-y:auto;flex:1;padding:0 16px 32px;}
+    .bs-content::-webkit-scrollbar{display:none;}
+    #fab-list{position:fixed;bottom:20px;right:14px;z-index:810;display:none;flex-direction:column;gap:10px;}
+    .fab{width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:transform .2s;}
+    .fab:active{transform:scale(0.93);}
+    .fab-main{background:var(--teal);color:#fff;width:54px;height:54px;font-size:22px;}
+    .fab-filter{background:#fff;color:var(--teal);}
+    #layer-ctrl{position:fixed;bottom:100px;right:14px;z-index:810;display:flex;flex-direction:column;gap:6px;}
+    .layer-btn{width:40px;height:40px;background:#fff;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:var(--shadow);transition:all .2s;}
+    .layer-btn:hover{border-color:var(--teal);}
+    .layer-btn.active{background:var(--teal);border-color:var(--teal);}
+    #filter-drawer{display:none;position:fixed;bottom:0;left:0;right:0;z-index:950;background:var(--card);border-radius:18px 18px 0 0;box-shadow:0 -4px 32px rgba(0,0,0,0.2);padding:0 16px 32px;}
+    #filter-drawer.show{display:block;}
+    .fd-title{font-size:15px;font-weight:700;padding:16px 0 14px;display:flex;align-items:center;justify-content:space-between;}
+    .fd-close{background:var(--bg);border:none;border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;}
+    #overlay{display:none;position:fixed;inset:0;z-index:940;background:rgba(0,0,0,0.4);}
+    #overlay.show{display:block;}
+    #legend{position:fixed;bottom:100px;left:14px;z-index:800;background:rgba(255,255,255,0.95);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow);font-size:11px;}
+    #legend .leg-title{font-weight:700;margin-bottom:7px;color:var(--teal-dark);font-size:10px;text-transform:uppercase;letter-spacing:.06em;}
+    .leg-item{display:flex;align-items:center;gap:6px;margin-bottom:4px;color:var(--text);}
+    .leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+    #loading{position:fixed;inset:0;z-index:9999;background:var(--teal);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;}
+    #loading .ld-icon{font-size:48px;animation:pulse 1.2s infinite;}
+    #loading .ld-text{font-size:15px;font-weight:600;opacity:.85;}
+    #loading .ld-spin{width:36px;height:36px;border:3px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(0.92)}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    #empty-state{display:none;text-align:center;padding:32px 16px;color:var(--muted);}
+    #empty-state .es-icon{font-size:36px;margin-bottom:10px;}
+    #empty-state p{font-size:13px;}
+    @media(max-width:680px){
+      #panel{display:none !important;}
+      #fab-list{display:flex;}
+      #legend{bottom:20px;}
+    }
+    @media(min-width:681px){
+      #map{left:var(--panel-w);}
+      #map.fullmap{left:0;}
+      #fab-list{display:none !important;}
+      #legend{left:calc(var(--panel-w) + 14px);}
+    }
+    .leaflet-control-zoom{border:none !important;box-shadow:var(--shadow) !important;}
+    .leaflet-control-zoom a{border-radius:10px !important;margin-bottom:4px !important;color:var(--teal) !important;font-weight:700 !important;border:1.5px solid var(--border) !important;}
+    .leaflet-control-zoom a:hover{background:var(--teal) !important;color:#fff !important;}
+  </style>
 </head>
 <body>
 
-    <div class="floating-panel">
-        <h6 class="fw-bold mb-1">WebGIS Monitoring</h6>
-        <div class="badge bg-primary mb-3">Total Data: <span id="counter">0</span></div>
-        <input type="text" id="search" class="form-control form-control-sm mb-2" placeholder="Cari nama...">
-        <select id="filterKec" class="form-select form-select-sm"><option value="">Semua Kecamatan</option></select>
+<div id="loading">
+  <div class="ld-icon">🚿</div>
+  <div class="ld-spin"></div>
+  <div class="ld-text">Memuat data layanan sedot tinja...</div>
+</div>
+
+<div id="topbar">
+  <div class="logo">
+    <div class="logo-icon">🗺️</div>
+    <div class="logo-text">
+      <h1>WebGIS Sedot Tinja</h1>
+      <p>DPRKP Kabupaten Ngawi · 2025</p>
     </div>
+  </div>
+  <button id="togglePanel" onclick="togglePanel()">☰</button>
+</div>
 
-    <div id="map"></div>
+<div id="panel">
+  <div id="stats-bar">
+    <div class="stat-card"><div class="val" id="stat-total">0</div><div class="lbl">Total Titik</div></div>
+    <div class="stat-card"><div class="val" id="stat-tampil">0</div><div class="lbl">Ditampilkan</div></div>
+    <div class="stat-card"><div class="val" id="stat-kec">0</div><div class="lbl">Kecamatan</div></div>
+    <div class="stat-card"><div class="val" id="stat-vol">0</div><div class="lbl">Total m³</div></div>
+  </div>
+  <div id="filters">
+    <div class="input-wrap">
+      <span class="icon">🔍</span>
+      <input type="text" id="search" placeholder="Cari nama pelanggan..." />
+    </div>
+    <div class="filter-row">
+      <div class="input-wrap">
+        <span class="icon">📍</span>
+        <select id="filterKec"><option value="">Semua Kecamatan</option></select>
+      </div>
+      <div class="input-wrap">
+        <span class="icon">🏠</span>
+        <select id="filterJenis"><option value="">Semua Jenis</option></select>
+      </div>
+    </div>
+    <div class="filter-row">
+      <div class="input-wrap">
+        <span class="icon">📅</span>
+        <select id="filterBulan"><option value="">Semua Bulan</option></select>
+      </div>
+      <button class="btn-reset" onclick="resetFilters()">✕ Reset</button>
+    </div>
+  </div>
+  <div id="list-header">Daftar Pelanggan</div>
+  <div id="list">
+    <div id="empty-state">
+      <div class="es-icon">🔎</div>
+      <p>Tidak ada data yang cocok<br>dengan filter ini.</p>
+    </div>
+  </div>
+</div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<div id="map"></div>
 
-    <script>
-        const map = L.map('map', { preferCanvas: true }).setView([-7.40, 111.44], 11);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+<div id="legend">
+  <div class="leg-title">Jenis Bangunan</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#0f9689"></div>Rumah Tangga</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#3b82f6"></div>Kantor Pemerintah</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#f59e0b"></div>Niaga / Pasar</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#8b5cf6"></div>Pendidikan</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#ef4444"></div>IPAL</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#22c55e"></div>Tempat Ibadah</div>
+</div>
 
-        const markerLayer = L.layerGroup().addTo(map);
-        let csvData = [];
+<div id="layer-ctrl">
+  <button class="layer-btn active" id="btn-street" onclick="setLayer('street')" title="Peta Jalan">🗺️</button>
+  <button class="layer-btn" id="btn-satellite" onclick="setLayer('satellite')" title="Satelit">🛰️</button>
+</div>
 
-        // LOAD DATA DARI CSV
-        Papa.parse('Titik_Koordinat_2025_5.csv', {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
-            complete: function(results) {
-                csvData = results.data;
-                setupFilters();
-                updateMap();
-            }
-        });
+<div id="fab-list">
+  <button class="fab fab-filter" onclick="openFilterDrawer()">⚙️</button>
+  <button class="fab fab-main" onclick="openBottomSheet()">📋</button>
+</div>
 
-        function updateMap() {
-            markerLayer.clearLayers();
-            const sText = document.getElementById('search').value.toLowerCase();
-            const fKec = document.getElementById('filterKec').value;
-            
-            let count = 0;
-            csvData.forEach(d => {
-                // PEMBERSIHAN DATA KOORDINAT (FIX UNTUK ERROR INVALID LATLNG)
-                let lat = d.Y ? String(d.Y).trim().replace(/[^0-9.-]/g, '') : null;
-                let lng = d.X ? String(d.X).trim().replace(/[^0-9.-]/g, '') : null;
+<div id="bottom-sheet">
+  <div class="bs-handle" onclick="closeBottomSheet()"><div class="bs-handle-bar"></div></div>
+  <div style="padding:0 16px 8px;display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div style="font-size:15px;font-weight:700;">Daftar Pelanggan</div>
+      <div style="font-size:11px;color:var(--muted);" id="bs-count-label">memuat...</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:center;">
+      <div style="background:var(--bg);border-radius:8px;padding:6px 10px;">
+        <div style="font-weight:700;font-size:16px;font-family:'JetBrains Mono',monospace;" id="bs-stat-total">0</div>
+        <div style="font-size:9px;color:var(--muted);">Titik</div>
+      </div>
+      <div style="background:var(--bg);border-radius:8px;padding:6px 10px;">
+        <div style="font-weight:700;font-size:16px;font-family:'JetBrains Mono',monospace;" id="bs-stat-vol">0m³</div>
+        <div style="font-size:9px;color:var(--muted);">Volume</div>
+      </div>
+    </div>
+  </div>
+  <div class="bs-content" id="bs-list"></div>
+</div>
 
-                if (lat && lng) {
-                    const matchKec = !fKec || d.Kecamatan === fKec;
-                    const matchSearch = !sText || d.Nama?.toLowerCase().includes(sText);
+<div id="overlay" onclick="closeFilterDrawer()"></div>
+<div id="filter-drawer">
+  <div class="fd-title">Filter Data <button class="fd-close" onclick="closeFilterDrawer()">✕</button></div>
+  <div style="display:flex;flex-direction:column;gap:10px;">
+    <div class="input-wrap"><span class="icon">🔍</span><input type="text" id="search-m" placeholder="Cari nama pelanggan..." /></div>
+    <div class="input-wrap"><span class="icon">📍</span><select id="filterKec-m"><option value="">Semua Kecamatan</option></select></div>
+    <div class="input-wrap"><span class="icon">🏠</span><select id="filterJenis-m"><option value="">Semua Jenis</option></select></div>
+    <div class="input-wrap"><span class="icon">📅</span><select id="filterBulan-m"><option value="">Semua Bulan</option></select></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+      <button class="btn-reset" onclick="resetFilters();closeFilterDrawer()">✕ Reset</button>
+      <button onclick="closeFilterDrawer()" style="padding:9px;background:var(--teal);border:none;border-radius:9px;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">Terapkan ✓</button>
+    </div>
+  </div>
+</div>
 
-                    if (matchKec && matchSearch) {
-                        count++;
-                        // Gambar marker hanya jika koordinat valid
-                        L.circleMarker([parseFloat(lat), parseFloat(lng)], {
-                            radius: 6, fillColor: '#007bff', color: '#fff', weight: 1, fillOpacity: 0.8
-                        })
-                        .bindPopup(`<b>${d.Nama}</b><br>${d.Desa}`)
-                        .addTo(markerLayer);
-                    }
-                }
-            });
-            document.getElementById('counter').innerText = count;
-        }
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<script>
+  const map = L.map('map',{preferCanvas:true,zoomControl:false}).setView([-7.40,111.44],11);
+  L.control.zoom({position:'bottomright'}).addTo(map);
 
-        function setupFilters() {
-            const kecs = [...new Set(csvData.map(d => d.Kecamatan))].sort();
-            const sel = document.getElementById('filterKec');
-            kecs.forEach(k => k && sel.add(new Option(k, k)));
-        }
+  const layers = {
+    street: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{attribution:'© CartoDB',maxZoom:19}),
+    satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri',maxZoom:19})
+  };
+  layers.street.addTo(map);
 
-        document.getElementById('search').addEventListener('input', updateMap);
-        document.getElementById('filterKec').addEventListener('change', updateMap);
-    </script>
+  const markerLayer = L.layerGroup().addTo(map);
+  let csvData=[], filteredData=[], panelOpen=true;
+
+  const colorMap = d => {
+    const j=(d.JenisBangunan||'').toLowerCase();
+    if(/rumah/.test(j)) return '#0f9689';
+    if(/kantor|pemerintah/.test(j)) return '#3b82f6';
+    if(/niaga|pasar/.test(j)) return '#f59e0b';
+    if(/pendidikan|lembaga/.test(j)) return '#8b5cf6';
+    if(/ipal/.test(j)) return '#ef4444';
+    if(/ibadah/.test(j)) return '#22c55e';
+    return '#6b7c78';
+  };
+
+  function normalizeJenis(j){
+    const s=(j||'').trim();
+    if(/rumah/i.test(s)) return 'Rumah Tangga';
+    if(/kantor|pemerintah/i.test(s)) return 'Kantor Pemerintah';
+    if(/niaga|pasar/i.test(s)) return 'Niaga / Pasar';
+    if(/pendidikan|lembaga/i.test(s)) return 'Lembaga Pendidikan';
+    if(/ipal/i.test(s)) return 'IPAL';
+    if(/ibadah/i.test(s)) return 'Tempat Ibadah';
+    return s||'Lainnya';
+  }
+
+  Papa.parse('Titik_Koordinat_2025_5.csv',{
+    download:true,header:true,skipEmptyLines:true,
+    complete(results){
+      csvData=results.data.map(d=>({
+        ...d,
+        _lat:parseFloat(String(d.Y||'').trim().replace(/[^0-9.-]/g,'')),
+        _lng:parseFloat(String(d.X||'').trim().replace(/[^0-9.-]/g,'')),
+        _kec:(d.Kecamatan||'').trim(),
+        _jenis:normalizeJenis(d.JenisBangunan),
+        _vol:parseFloat(d.Volume)||0
+      })).filter(d=>!isNaN(d._lat)&&!isNaN(d._lng));
+      setupFilters(); updateMap();
+      document.getElementById('loading').style.display='none';
+    }
+  });
+
+  function setupFilters(){
+    const kecs=[...new Set(csvData.map(d=>d._kec).filter(Boolean))].sort();
+    const jenis=[...new Set(csvData.map(d=>d._jenis).filter(Boolean))].sort();
+    const bulan=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    ['filterKec','filterKec-m'].forEach(id=>{const el=document.getElementById(id);kecs.forEach(k=>el.add(new Option(k,k)));});
+    ['filterJenis','filterJenis-m'].forEach(id=>{const el=document.getElementById(id);jenis.forEach(j=>el.add(new Option(j,j)));});
+    ['filterBulan','filterBulan-m'].forEach(id=>{const el=document.getElementById(id);bulan.forEach(b=>el.add(new Option(b,b)));});
+    document.getElementById('stat-total').textContent=csvData.length;
+    document.getElementById('stat-kec').textContent=kecs.length;
+  }
+
+  function getFilters(){
+    const mob=window.innerWidth<=680;
+    return{
+      search:(mob?document.getElementById('search-m'):document.getElementById('search')).value.toLowerCase(),
+      kec:(mob?document.getElementById('filterKec-m'):document.getElementById('filterKec')).value,
+      jenis:(mob?document.getElementById('filterJenis-m'):document.getElementById('filterJenis')).value,
+      bulan:(mob?document.getElementById('filterBulan-m'):document.getElementById('filterBulan')).value
+    };
+  }
+
+  function updateMap(){
+    markerLayer.clearLayers();
+    const f=getFilters();
+    filteredData=csvData.filter(d=>{
+      if(f.search&&!((d.Nama||'').toLowerCase().includes(f.search)||(d.Alamat||'').toLowerCase().includes(f.search))) return false;
+      if(f.kec&&d._kec!==f.kec) return false;
+      if(f.jenis&&d._jenis!==f.jenis) return false;
+      if(f.bulan&&(d.Bulan||'').trim()!==f.bulan) return false;
+      return true;
+    });
+    filteredData.forEach((d,i)=>{
+      const color=colorMap(d);
+      const m=L.circleMarker([d._lat,d._lng],{radius:7,fillColor:color,color:'#fff',weight:2,fillOpacity:0.88});
+      m.bindPopup(buildPopup(d),{className:'custom-popup',maxWidth:310,closeButton:true});
+      m.on('click',()=>highlightListItem(i));
+      m.addTo(markerLayer);
+    });
+    renderList(); updateStats();
+  }
+
+  function buildPopup(d){
+    const color=colorMap(d);
+    return`<div>
+      <div class="popup-header" style="background:${color}">
+        <div class="ph-no">No. ${d.no||'-'}</div>
+        <h3>${(d.Nama||'Tanpa Nama').trim()}</h3>
+        <div class="ph-badge">${d._jenis}</div>
+      </div>
+      <div class="popup-body">
+        <div class="popup-row"><span class="pk">📞 Telepon</span><span class="pv">${d.Nomor_Tlp||'-'}</span></div>
+        <div class="popup-row"><span class="pk">📍 Alamat</span><span class="pv">${(d.Alamat||'-').trim()}</span></div>
+        <div class="popup-row"><span class="pk">🏘️ Desa</span><span class="pv">${(d.Desa||'-').trim()}</span></div>
+        <div class="popup-row"><span class="pk">🗺️ Kecamatan</span><span class="pv">${d._kec||'-'}</span></div>
+        <div class="popup-divider"></div>
+        <div class="popup-row"><span class="pk">📦 Jml Tangki</span><span class="pv">${d.Jumlah_Tangki_Septik||'-'} tangki</span></div>
+        <div class="popup-row"><span class="pk">🧱 Material</span><span class="pv">${(d.Material_Tangki||'-').trim()}</span></div>
+        <div class="popup-row"><span class="pk">📐 Volume</span><span class="pv">${d.Volume||'-'} m³</span></div>
+        <div class="popup-row"><span class="pk">📅 Disedot</span><span class="pv">${d.Tgl_Penyedotan||'-'}</span></div>
+      </div>
+      <div class="popup-next">
+        <div class="pn-icon">⏰</div>
+        <div class="pn-text">
+          <div class="pn-label">Jadwal Penyedotan Berikutnya</div>
+          <div class="pn-date">${d.Jadwal_Penyedotan||'-'}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function renderList(){
+    const list=document.getElementById('list');
+    const bsList=document.getElementById('bs-list');
+    const empty=document.getElementById('empty-state');
+    const html=filteredData.map((d,i)=>`
+      <div class="list-item" id="li-${i}" onclick="flyToMarker(${i})">
+        <div class="list-dot" style="background:${colorMap(d)}"></div>
+        <div class="list-info">
+          <div class="list-nama">${(d.Nama||'Tanpa Nama').trim()}</div>
+          <div class="list-sub">${(d.Desa||'').trim()}, ${d._kec} · ${d._jenis}</div>
+        </div>
+        <div class="list-date">${d.Bulan?d.Bulan.slice(0,3):'-'}</div>
+      </div>`).join('');
+    if(!filteredData.length){list.innerHTML='';empty.style.display='block';}
+    else{empty.style.display='none';list.innerHTML=html;}
+    bsList.innerHTML=html;
+  }
+
+  function updateStats(){
+    const count=filteredData.length;
+    const vol=filteredData.reduce((s,d)=>s+d._vol,0);
+    document.getElementById('stat-tampil').textContent=count;
+    document.getElementById('stat-vol').textContent=vol.toFixed(0);
+    document.getElementById('bs-count-label').textContent=`${count} titik ditampilkan`;
+    document.getElementById('bs-stat-total').textContent=count;
+    document.getElementById('bs-stat-vol').textContent=vol.toFixed(0)+'m³';
+  }
+
+  function flyToMarker(i){
+    const d=filteredData[i]; if(!d) return;
+    map.flyTo([d._lat,d._lng],15,{duration:0.8});
+    let idx=0;
+    markerLayer.eachLayer(layer=>{if(idx===i)layer.openPopup();idx++;});
+    highlightListItem(i); closeBottomSheet();
+  }
+
+  function highlightListItem(i){
+    document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('active'));
+    const el=document.getElementById(`li-${i}`);
+    if(el){el.classList.add('active');el.scrollIntoView({behavior:'smooth',block:'nearest'});}
+  }
+
+  function setLayer(type){
+    Object.values(layers).forEach(l=>map.removeLayer(l));
+    layers[type].addTo(map);
+    document.getElementById('btn-street').classList.toggle('active',type==='street');
+    document.getElementById('btn-satellite').classList.toggle('active',type==='satellite');
+  }
+
+  function togglePanel(){
+    const panel=document.getElementById('panel');
+    panelOpen=!panelOpen;
+    panel.classList.toggle('hidden',!panelOpen);
+    document.getElementById('map').classList.toggle('fullmap',!panelOpen);
+    setTimeout(()=>map.invalidateSize(),310);
+  }
+
+  function openBottomSheet(){document.getElementById('bottom-sheet').classList.add('show');}
+  function closeBottomSheet(){document.getElementById('bottom-sheet').classList.remove('show');}
+  function openFilterDrawer(){document.getElementById('filter-drawer').classList.add('show');document.getElementById('overlay').classList.add('show');}
+  function closeFilterDrawer(){
+    document.getElementById('filter-drawer').classList.remove('show');
+    document.getElementById('overlay').classList.remove('show');
+    updateMap();
+  }
+
+  function resetFilters(){
+    ['search','search-m'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    ['filterKec','filterKec-m','filterJenis','filterJenis-m','filterBulan','filterBulan-m'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    updateMap();
+  }
+
+  ['search','filterKec','filterJenis','filterBulan'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.addEventListener('input',updateMap);el.addEventListener('change',updateMap);}
+  });
+
+  map.on('click',()=>closeBottomSheet());
+  window.addEventListener('resize',()=>map.invalidateSize());
+</script>
 </body>
 </html>
